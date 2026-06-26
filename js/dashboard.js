@@ -63,7 +63,7 @@ async function loadStats() {
     let demosSnap, relSnap, beatsSnap, presetsSnap;
 
     // Yetki kontrolüne göre veri çekme
-    if(role === 'admin' || role === 'crew' || role === 'producer') {
+    if(role === 'admin' || role === 'producer') {
       demosSnap = await getDocs(collection(db, "demos"));
       beatsSnap = await getDocs(collection(db, "beats"));
       presetsSnap = await getDocs(collection(db, "presets"));
@@ -74,8 +74,8 @@ async function loadStats() {
       presetsSnap = { size: 0 }; // Sanatçı preset göremez
     }
 
-    // Release için admin/crew tüm bekleyenleri, artist sadece kendininkini görür
-    if(role === 'admin' || role === 'crew') {
+    // Release için admin tüm bekleyenleri, diğerleri sadece kendininkini görür
+    if(role === 'admin') {
       relSnap = await getDocs(query(collection(db, "releases"), where("status", "==", "bekliyor")));
     } else {
       relSnap = await getDocs(query(collection(db, "releases"), where("ownerId", "==", uid), where("status", "==", "bekliyor")));

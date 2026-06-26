@@ -1,5 +1,5 @@
 import { db, storage } from './firebase.js';
-import { collection, addDoc, getDocs, getDoc, doc, setDoc, query, orderBy, limit, startAfter, serverTimestamp, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+import { collection, addDoc, getDocs, getDoc, doc, setDoc, updateDoc, query, orderBy, limit, startAfter, serverTimestamp, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-storage.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
 import { auth } from './auth.js';
@@ -21,8 +21,12 @@ async function uploadDemo() {
   const file = document.getElementById('demo-file').files[0];
   
   if(!title || !file) return alert("Başlık ve dosya zorunludur!");
+
+  const check = window.validateFile(file, { maxMB: 50, exts: ['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac'] });
+  if(!check.ok) return alert(check.message);
+
   const uid = localStorage.getItem('uid');
-  
+
   const btn = document.getElementById('upload-demo-btn');
   btn.innerText = 'Yükleniyor...';
   btn.disabled = true;
@@ -185,10 +189,15 @@ window.submitDemoRating = async function(docId, ownerId, title) {
   if(!s1 || !s2 || !s3) return alert("Lütfen tüm kriterleri puanlayın!");
 
   try {
-    // Demo verisini güncelle (Score ekle - basit merge)
-    // Gerçekte array union kullanılır, demo amaçlı basit bir array yapıyoruz
+    // Demo verisine puanı kaydet (aynı kişi tekrar puanlarsa eski puanının üzerine yazılır)
     const demoRef = doc(db, "demos", docId);
-    
+    const raterId = localStorage.getItem('uid');
+    const demoSnap = await getDoc(demoRef);
+    let scoreData = (demoSnap.exists() && demoSnap.data().scoreData) || [];
+    scoreData = scoreData.filter(s => s.raterId !== raterId);
+    scoreData.push({ raterId, s1: Number(s1), s2: Number(s2), s3: Number(s3), note: note || '' });
+    await updateDoc(demoRef, { scoreData });
+
     // Bildirim gönder
     const msg = `${localStorage.getItem('userName')}, "${title}" demona oylama yaptı. Notu: "${note || 'Not yok'}"`;
     await addDoc(collection(db, `notifications/${ownerId}/user_notifications`), {

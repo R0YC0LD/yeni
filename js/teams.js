@@ -1,5 +1,5 @@
 import { db } from './firebase.js';
-import { collection, addDoc, getDocs, doc, setDoc, deleteDoc, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+import { collection, addDoc, getDocs, getDoc, doc, setDoc, deleteDoc, query, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
 import { auth } from './auth.js';
 
@@ -11,39 +11,111 @@ document.addEventListener('DOMContentLoaded', () => {
     if(user) {
       currentUser = user;
       userRole = localStorage.getItem('userRole');
-      if(userRole !== 'admin') {
+
+      if(userRole === 'admin') {
+        document.getElementById('admin-team-panel').style.display = 'block';
+        loadTeams();
+      } else if(userRole === 'producer') {
+        document.getElementById('producer-artists-panel').style.display = 'block';
+        loadMyArtists();
+      } else {
         document.querySelector('.main-content').innerHTML = '<h2 style="margin:2rem">Yetkiniz Yok</h2>';
-        return;
       }
-      loadTeams();
     }
   });
 
-  document.getElementById('btn-create-team').addEventListener('click', createTeam);
+  const createBtn = document.getElementById('btn-create-team');
+  if(createBtn) createBtn.addEventListener('click', createTeam);
 });
+
+async function loadMyArtists() {
+  const list = document.getElementById('my-artists-list');
+  if(!list) return;
+  list.innerHTML = '<p>Yükleniyor...</p>';
+
+  try {
+    // teams koleksiyonu members alanında nesne array'i tuttuğu için
+    // "kendi üyesi olduğum ekipler" sorgusu client-side filtreleniyor (mevcut admin akışıyla aynı desen).
+    const snap = await getDocs(collection(db, "teams"));
+    const artistIds = new Set();
+
+    snap.forEach(d => {
+      const data = d.data();
+      const amMember = data.members && data.members.some(m => m.uid === currentUser.uid);
+      if(amMember) {
+        data.members.forEach(m => { if(m.role === 'artist') artistIds.add(m.uid); });
+      }
+    });
+
+    if(artistIds.size === 0) {
+      list.innerHTML = '<p class="text-mut">Henüz bir ekipte birlikte çalıştığın sanatçı yok.</p>';
+      return;
+    }
+
+    list.innerHTML = '';
+    for(const aid of artistIds) {
+      const uDoc = await getDoc(doc(db, "users", aid));
+      if(!uDoc.exists()) continue;
+      const u = uDoc.data();
+
+      list.innerHTML += `
+        <div class="member-row">
+          <div style="display:flex; align-items:center; gap:10px; cursor:pointer;" onclick="window.location.href='profile.html?uid=${aid}'">
+            <div id="art-av-${aid}"></div>
+            <span style="font-family:'Space Mono'; font-size:0.85rem; color:#fff;">${u.name || 'İsimsiz'}</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <button class="btn btn-ghost btn-sm" style="padding:2px 6px; font-size:0.65rem;" onclick="this.nextElementSibling.classList.remove('hidden'); this.classList.add('hidden')">Maili Göster</button>
+            <span class="hidden" style="font-size:0.75rem; color:var(--mut);">${u.email || ''}</span>
+          </div>
+        </div>
+      `;
+
+      window.getUserAvatar(aid).then(url => {
+        const el = document.getElementById(`art-av-${aid}`);
+        if(el) el.innerHTML = window.renderAvatarHtml(url, 32, u.name || 'User');
+      });
+    }
+  } catch(e) {
+    list.innerHTML = `<p style="color:var(--bad)">Hata: ${e.message}</p>`;
+  }
+}
+
+async function repairTeamChatSync(tId, members) {
+  try {
+    const memberUids = members.map(m => m.uid);
+    const cRef = doc(db, "chats", tId);
+    const cSnap = await getDoc(cRef);
+    if(!cSnap.exists()) return;
+
+    const parts = cSnap.data().participants || [];
+    const missing = memberUids.filter(uid => !parts.includes(uid));
+    if(missing.length > 0) {
+      await setDoc(cRef, { participants: [...parts, ...missing] }, { merge: true });
+    }
+  } catch(e) {
+    console.error('Grup sohbeti senkron onarımı başarısız:', tId, e);
+  }
+}
 
 async function loadTeams() {
   const list = document.getElementById('teams-list');
   list.innerHTML = '';
-  
-  try {
-    let q;
-    if(userRole === 'admin') {
-      q = query(collection(db, "teams"));
-    } else {
-      q = query(collection(db, "teams"), where("ownerId", "==", currentUser.uid));
-    }
 
-    const snap = await getDocs(q);
+  try {
+    const snap = await getDocs(query(collection(db, "teams")));
     if(snap.empty) {
-      list.innerHTML = '<p class="text-mut">Henüz kurduğunuz bir ekip yok.</p>';
+      list.innerHTML = '<p class="text-mut">Henüz kurulmuş bir ekip yok.</p>';
       return;
     }
 
     for (const docSnap of snap.docs) {
       const d = docSnap.data();
       const tId = docSnap.id;
-      
+
+      // Geçmişte chat senkronu başarısız olmuş (üye eklendi ama grup sohbetine düşmedi) ekipleri sessizce onar
+      repairTeamChatSync(tId, d.members || []);
+
       let memHtml = '';
       if(d.members && d.members.length > 0) {
         for(const m of d.members) {
@@ -179,10 +251,9 @@ window.searchAndAddUser = async function(tId) {
 window.addMemberToTeam = async function(tId, uid, name, role) {
   try {
     const tRef = doc(db, "teams", tId);
-    const snap = await getDocs(query(collection(db, "teams")));
-    let members = [];
-    snap.forEach(s => { if(s.id === tId) members = s.data().members || []; });
-    
+    const tSnap = await getDoc(tRef);
+    let members = tSnap.exists() ? (tSnap.data().members || []) : [];
+
     if(members.find(m => m.uid === uid)) {
       alert("Bu kullanıcı zaten ekipte.");
       return;
@@ -193,9 +264,8 @@ window.addMemberToTeam = async function(tId, uid, name, role) {
 
     // Update chat participants
     const cRef = doc(db, "chats", tId);
-    const cSnap = await getDocs(query(collection(db, "chats")));
-    let parts = [];
-    cSnap.forEach(s => { if(s.id === tId) parts = s.data().participants || []; });
+    const cSnap = await getDoc(cRef);
+    let parts = cSnap.exists() ? (cSnap.data().participants || []) : [];
     if(!parts.includes(uid)) parts.push(uid);
     await setDoc(cRef, { participants: parts }, { merge: true });
 
@@ -219,18 +289,16 @@ window.removeMember = async function(tId, uid) {
   if(!confirm('Kullanıcıyı ekipten çıkarmak istediğinize emin misiniz?')) return;
   try {
     const tRef = doc(db, "teams", tId);
-    const snap = await getDocs(query(collection(db, "teams")));
-    let members = [];
-    snap.forEach(s => { if(s.id === tId) members = s.data().members || []; });
-    
+    const tSnap = await getDoc(tRef);
+    let members = tSnap.exists() ? (tSnap.data().members || []) : [];
+
     members = members.filter(m => m.uid !== uid);
     await setDoc(tRef, { members: members }, { merge: true });
 
     // Remove from chat
     const cRef = doc(db, "chats", tId);
-    const cSnap = await getDocs(query(collection(db, "chats")));
-    let parts = [];
-    cSnap.forEach(s => { if(s.id === tId) parts = s.data().participants || []; });
+    const cSnap = await getDoc(cRef);
+    let parts = cSnap.exists() ? (cSnap.data().participants || []) : [];
     parts = parts.filter(p => p !== uid);
     await setDoc(cRef, { participants: parts }, { merge: true });
 

@@ -39,7 +39,12 @@ async function submitRelease() {
   if(!title || !coverFile || !audioFile || !date) return alert("Tüm zorunlu alanları (Ad, Kapak, Müzik, Tarih) doldurun!");
   if(!agmt) return alert("Kullanıcı sözleşmesini okuyup kabul etmelisiniz.");
   if(!hasLicense) return alert("Beat lisansını onaylamadan yayın yapamazsınız.");
-  
+
+  const coverCheck = window.validateFile(coverFile, { maxMB: 5, exts: ['.jpg', '.jpeg', '.png', '.webp'] });
+  if(!coverCheck.ok) return alert(coverCheck.message);
+  const audioCheck = window.validateFile(audioFile, { maxMB: 25, exts: ['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac'] });
+  if(!audioCheck.ok) return alert(audioCheck.message);
+
   const uid = localStorage.getItem('uid');
   const btn = document.getElementById('submit-release-btn');
   btn.innerText = 'Yükleniyor (Zaman alabilir)...';
@@ -81,7 +86,7 @@ async function submitRelease() {
   }
 }
 
-import { getDocs, getDoc, deleteDoc, doc, query, orderBy, limit, startAfter } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+import { getDocs, getDoc, deleteDoc, updateDoc, doc, query, orderBy, limit, startAfter } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 document.addEventListener('DOMContentLoaded', () => {
   onAuthStateChanged(auth, (user) => {
     if(user && localStorage.getItem('userRole') === 'admin') {
@@ -121,12 +126,27 @@ window.loadAdminReleases = async function(loadMore = false) {
 
     snap.forEach(d => {
       const data = d.data();
-      list.innerHTML += `<div style="background:rgba(255,255,255,0.05); padding:1rem; border-radius:10px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+      const status = data.status || 'bekliyor';
+      const statusBadge = {
+        bekliyor: '<span class="badge" style="color:#e3b341; border-color:rgba(227,179,65,.4);">BEKLİYOR</span>',
+        onaylandı: '<span class="badge" style="color:#4ade80; border-color:rgba(74,222,128,.4);">ONAYLANDI</span>',
+        reddedildi: '<span class="badge" style="color:var(--bad); border-color:var(--bad);">REDDEDİLDİ</span>'
+      }[status] || '';
+
+      const decisionBtns = status === 'bekliyor' ? `
+          <button class="btn btn-ghost" style="color:#4ade80;" onclick="window.approveRelease('${d.id}', '${(data.title||'').replace(/'/g,"\\'")}', '${data.ownerId}')">✅ Onayla</button>
+          <button class="btn btn-ghost" style="color:var(--bad);" onclick="window.rejectRelease('${d.id}', '${(data.title||'').replace(/'/g,"\\'")}', '${data.ownerId}')">❌ Reddet</button>
+        ` : '';
+
+      list.innerHTML += `<div style="background:rgba(255,255,255,0.05); padding:1rem; border-radius:10px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; gap:1rem; flex-wrap:wrap;">
           <div>
-            <h4 style="color:#fff">${data.title}</h4>
+            <h4 style="color:#fff">${data.title} ${statusBadge}</h4>
             <p style="font-size:0.8rem; color:var(--mut);">Sanatçı: ${data.artistName}</p>
           </div>
-          <button class="btn btn-ghost" style="color:var(--bad);" onclick="deleteRelease('${d.id}')">🗑️ Sil</button>
+          <div style="display:flex; gap:0.5rem;">
+            ${decisionBtns}
+            <button class="btn btn-ghost" style="color:var(--bad);" onclick="deleteRelease('${d.id}')">🗑️ Sil</button>
+          </div>
         </div>`;
     });
 
@@ -134,6 +154,35 @@ window.loadAdminReleases = async function(loadMore = false) {
       list.innerHTML += `<button id="load-more-releases" class="btn btn-secondary" style="width:100%; margin-top:10px;" onclick="window.loadAdminReleases(true)">Daha Fazla Yükle</button>`;
     }
   } catch(e) { list.innerHTML = 'Hata: ' + e.message; }
+}
+
+window.approveRelease = async function(id, title, ownerId) {
+  try {
+    await updateDoc(doc(db, "releases", id), { status: 'onaylandı' });
+    await addDoc(collection(db, `notifications/${ownerId}/user_notifications`), {
+      message: `"${title}" adlı şarkın onaylandı ve yayına hazırlanıyor!`,
+      createdAt: serverTimestamp(),
+      type: 'release_approved',
+      link: 'releases.html'
+    });
+    window.logActivity('Release onayladı', title);
+    window.loadAdminReleases();
+  } catch(e) { alert('Hata: ' + e.message); }
+}
+
+window.rejectRelease = async function(id, title, ownerId) {
+  const reason = prompt('Red sebebini yazabilirsin (opsiyonel):', '') || '';
+  try {
+    await updateDoc(doc(db, "releases", id), { status: 'reddedildi', rejectReason: reason });
+    await addDoc(collection(db, `notifications/${ownerId}/user_notifications`), {
+      message: `"${title}" adlı şarkın reddedildi.${reason ? ' Sebep: ' + reason : ''}`,
+      createdAt: serverTimestamp(),
+      type: 'release_rejected',
+      link: 'releases.html'
+    });
+    window.logActivity('Release reddetti', title);
+    window.loadAdminReleases();
+  } catch(e) { alert('Hata: ' + e.message); }
 }
 
 window.deleteRelease = async function(id) {
@@ -149,6 +198,7 @@ window.deleteRelease = async function(id) {
         if(d.audioUrl) {
           try { await deleteObject(ref(storage, d.audioUrl)); } catch(err) {}
         }
+        window.logActivity('Release sildi', d.title);
       }
       await deleteDoc(releaseRef);
       window.loadAdminReleases();

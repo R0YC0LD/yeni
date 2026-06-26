@@ -26,21 +26,33 @@
     <div class="main-content">
       <div id="navbar-container"></div>
 
-      <div class="card">
-        <h3>Ekipler Yönetimi</h3>
-        <p class="text-mut">Yeni ekip kurabilir, mevcut ekiplerinize üye ekleyip çıkarabilirsiniz.</p>
-        
-        <div style="margin-top:2rem; display:flex; gap:10px;">
-          <input type="text" id="new-team-name" placeholder="Yeni Ekip Adı...">
-          <button class="btn btn-primary" id="btn-create-team">Ekip Kur</button>
+      <div id="admin-team-panel" style="display:none;">
+        <div class="card">
+          <h3>Ekipler Yönetimi</h3>
+          <p class="text-mut">Yeni ekip kurabilir, mevcut ekiplerinize üye ekleyip çıkarabilirsiniz.</p>
+
+          <div style="margin-top:2rem; display:flex; gap:10px;">
+            <input type="text" id="new-team-name" placeholder="Yeni Ekip Adı...">
+            <button class="btn btn-primary" id="btn-create-team">Ekip Kur</button>
+          </div>
+        </div>
+
+        <div id="teams-list" style="margin-top: 2rem;">
+          <!-- Teams will be loaded here -->
+          <p>Yükleniyor...</p>
         </div>
       </div>
 
-      <div id="teams-list" style="margin-top: 2rem;">
-        <!-- Teams will be loaded here -->
-        <p>Yükleniyor...</p>
+      <div id="producer-artists-panel" style="display:none;">
+        <div class="card">
+          <h3>🎤 Çalıştığım Sanatçılar</h3>
+          <p class="text-mut">Aynı ekipte olduğun sanatçıları burada görebilir, mail adreslerine erişebilirsin.</p>
+          <div id="my-artists-list" style="margin-top: 1.5rem; display:flex; flex-direction:column; gap:0.5rem;">
+            <p>Yükleniyor...</p>
+          </div>
+        </div>
       </div>
-      
+
     </div>
   </div>
 

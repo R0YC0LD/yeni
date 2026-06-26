@@ -62,6 +62,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   document.getElementById('chat-send').addEventListener('click', sendMessage);
+  document.getElementById('chat-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
 
   document.getElementById('chatdel-cancel').addEventListener('click', () => {
     chatdelModal.style.display = 'none';

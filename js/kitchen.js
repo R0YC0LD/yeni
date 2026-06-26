@@ -1,5 +1,5 @@
 import { db, storage } from './firebase.js';
-import { collection, addDoc, getDocs, doc, query, where, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+import { collection, addDoc, getDocs, getDoc, doc, updateDoc, query, where, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 import { ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-storage.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
 import { auth } from './auth.js';
@@ -28,6 +28,15 @@ async function uploadItem(type) {
   const btn = document.getElementById(`upload-${type}-btn`);
   
   if(!title || !file) return alert("Başlık ve dosya zorunludur!");
+
+  const limits = {
+    beat: { maxMB: 50, exts: ['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac'] },
+    preset: { maxMB: 50 },
+    stem: { maxMB: 100, exts: ['.zip', '.rar'] }
+  };
+  const check = window.validateFile(file, limits[type]);
+  if(!check.ok) return alert(check.message);
+
   const uid = localStorage.getItem('uid');
   
   btn.innerText = 'Yükleniyor...';
@@ -140,7 +149,7 @@ async function loadItems(collectionName) {
           <div style="display:flex; align-items:center; gap:10px; margin-bottom:15px; border-bottom:1px solid var(--line); padding-bottom:10px;">
             <div id="k-av-${id}"></div>
             <div>
-              <div style="font-family:'Space Mono'; font-size:0.8rem; font-weight:bold; color:#fff;">${d.ownerName}</div>
+              <div id="k-name-${id}" style="font-family:'Space Mono'; font-size:0.8rem; font-weight:bold; color:#fff;">${d.ownerName}</div>
               <div style="font-size:0.65rem; color:var(--text-mut);">Yükleyen</div>
             </div>
           </div>
@@ -148,10 +157,13 @@ async function loadItems(collectionName) {
         </div>
       `;
 
-      // Async avatar
+      // Async avatar + güncel isim (yükleme anında kaydedilen isim eskiyse, kullanıcı profilinden tazelenir)
       window.getUserAvatar(d.ownerId).then(avUrl => {
         const avEl = document.getElementById(`k-av-${id}`);
-        if(avEl) avEl.innerHTML = window.renderAvatarHtml(avUrl, 36, d.ownerName);
+        const freshName = window.userCache.get(d.ownerId)?.name || d.ownerName;
+        if(avEl) avEl.innerHTML = window.renderAvatarHtml(avUrl, 36, freshName);
+        const nameEl = document.getElementById(`k-name-${id}`);
+        if(nameEl) nameEl.innerText = freshName;
       });
     });
   } catch(e) {
@@ -184,10 +196,15 @@ window.submitBeatRating = async function(docId, ownerId, title) {
   if(!s1 || !s2 || !s3 || !s4) return alert("Lütfen tüm kriterleri puanlayın!");
 
   try {
-    // Gerçekte array union kullanılır, demo amaçlı basit bir bildirim atıyoruz
-    // Firestore security rule'dan dolayı doğrudan update yetkisi olmayabilir (eğer isOwner değilse)
-    // Bu sebeple veritabanı update'ini admin paneline veya cloud func'a bırakıp bildirimi atıyoruz.
-    
+    // Beat verisine puanı kaydet (aynı kişi tekrar puanlarsa eski puanının üzerine yazılır)
+    const beatRef = doc(db, "beats", docId);
+    const raterId = localStorage.getItem('uid');
+    const beatSnap = await getDoc(beatRef);
+    let scoreData = (beatSnap.exists() && beatSnap.data().scoreData) || [];
+    scoreData = scoreData.filter(s => s.raterId !== raterId);
+    scoreData.push({ raterId, s1: Number(s1), s2: Number(s2), s3: Number(s3), s4: Number(s4), note: note || '' });
+    await updateDoc(beatRef, { scoreData });
+
     const msg = `${localStorage.getItem('userName')}, "${title}" adlı beatini oyladı. Notu: "${note || 'Not yok'}"`;
     await addDoc(collection(db, `notifications/${ownerId}/user_notifications`), {
       message: msg,

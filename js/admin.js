@@ -1,5 +1,5 @@
 import { db } from './firebase.js';
-import { collection, getDocs, doc, setDoc, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+import { collection, getDocs, doc, setDoc, addDoc, serverTimestamp, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
 import { auth } from './auth.js';
 
@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (user) {
       loadUsers();
       loadTaskAssignTargets();
+      loadActivityLog();
     }
   });
 
@@ -45,10 +46,11 @@ async function loadUsers() {
               <div id="adm-av-p-${id}" style="cursor:pointer;" onclick="window.location.href='profile.html?uid=${id}'"></div>
               <div style="cursor:pointer;" onclick="window.location.href='profile.html?uid=${id}'">
                 <h4 style="margin:0;">${u.name || 'İsimsiz'}</h4>
-                <p style="margin:0; font-size:0.8rem;">${u.email}</p>
+                <button class="btn btn-ghost btn-sm" style="padding:2px 6px; font-size:0.65rem;" onclick="event.stopPropagation(); this.nextElementSibling.classList.remove('hidden'); this.classList.add('hidden')">Maili Göster</button>
+                <span class="hidden" style="font-size:0.8rem; color:var(--mut);">${u.email}</span>
               </div>
             </div>
-            <button class="btn btn-primary" onclick="window.approveUser('${id}')">Erişim Ver</button>
+            <button class="btn btn-primary" onclick="window.approveUser('${id}', '${(u.name || u.email || '').replace(/'/g, "\\'")}')">Erişim Ver</button>
           </div>
         `;
         window.getUserAvatar(id).then(url => {
@@ -62,10 +64,11 @@ async function loadUsers() {
               <div id="adm-av-${id}" style="cursor:pointer;" onclick="window.location.href='profile.html?uid=${id}'"></div>
               <div style="cursor:pointer;" onclick="window.location.href='profile.html?uid=${id}'">
                 <h4 style="margin:0;">${u.name || 'İsimsiz'}</h4>
-                <p style="margin:0; font-size:0.8rem;">${u.email}</p>
+                <button class="btn btn-ghost btn-sm" style="padding:2px 6px; font-size:0.65rem;" onclick="event.stopPropagation(); this.nextElementSibling.classList.remove('hidden'); this.classList.add('hidden')">Maili Göster</button>
+                <span class="hidden" style="font-size:0.8rem; color:var(--mut);">${u.email}</span>
               </div>
             </div>
-            <select onchange="window.changeUserRole('${id}', this.value)">
+            <select onchange="window.changeUserRole('${id}', this.value, '${(u.name || u.email || '').replace(/'/g, "\\'")}')">
               <option value="artist" ${u.role === 'artist' ? 'selected' : ''}>Sanatçı</option>
               <option value="producer" ${u.role === 'producer' ? 'selected' : ''}>Prodüktör</option>
               <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Yönetici</option>
@@ -89,9 +92,10 @@ async function loadUsers() {
   }
 }
 
-window.approveUser = async function(uid) {
+window.approveUser = async function(uid, name) {
   try {
     await setDoc(doc(db, "users", uid), { isApproved: true }, { merge: true });
+    window.logActivity('Kullanıcıyı onayladı', name);
     alert("Kullanıcıya sisteme erişim izni verildi.");
     loadUsers(); // Listeyi yenile
   } catch(e) {
@@ -99,11 +103,12 @@ window.approveUser = async function(uid) {
   }
 }
 
-window.changeUserRole = async function(uid, role) {
+window.changeUserRole = async function(uid, role, name) {
   try {
     // Admin yapılırken isApproved otomatik true olsun
     const data = role === 'admin' ? { role: role, isApproved: true } : { role: role };
     await setDoc(doc(db, "users", uid), data, { merge: true });
+    window.logActivity(`Rolü "${role}" yaptı`, name);
     alert("Kullanıcı rolü başarıyla güncellendi.");
   } catch(e) {
     alert("Yetki Hatası: " + e.message);
@@ -171,6 +176,9 @@ async function sendProducerTask() {
       link: 'dashboard.html'
     });
 
+    const prodName = prodSelect.options[prodSelect.selectedIndex].innerText;
+    window.logActivity('Prodüktöre görev gönderdi', prodName);
+
     msgInput.value = '';
     userSelect.value = '';
     if (window.showToast) window.showToast("Görev prodüktöre gönderildi.");
@@ -180,5 +188,35 @@ async function sendProducerTask() {
   } finally {
     btn.disabled = false;
     btn.innerText = "Gönder";
+  }
+}
+
+// ---------- Aktivite Günlüğü ----------
+async function loadActivityLog() {
+  const list = document.getElementById('activity-log-list');
+  if (!list) return;
+
+  try {
+    const q = query(collection(db, "activity_log"), orderBy('createdAt', 'desc'), limit(20));
+    const snap = await getDocs(q);
+
+    if (snap.empty) {
+      list.innerHTML = '<p style="font-size:0.8rem; color:var(--mut);">Henüz bir kayıt yok.</p>';
+      return;
+    }
+
+    list.innerHTML = '';
+    snap.forEach(d => {
+      const a = d.data();
+      const time = a.createdAt ? a.createdAt.toDate().toLocaleString('tr-TR') : '';
+      list.innerHTML += `
+        <div style="font-size:0.78rem; padding:0.6rem 0; border-bottom:1px solid var(--line);">
+          <span style="color:#fff; font-weight:bold;">${a.actorName}</span> ${a.action}${a.targetName ? `: <span style="color:var(--shn-pink);">${a.targetName}</span>` : ''}
+          <span style="color:var(--mut); float:right;">${time}</span>
+        </div>
+      `;
+    });
+  } catch (e) {
+    list.innerHTML = `<p style="color:var(--bad)">Aktivite günlüğü yüklenemedi: ${e.message}</p>`;
   }
 }

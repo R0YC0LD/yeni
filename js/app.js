@@ -29,11 +29,20 @@ document.addEventListener('DOMContentLoaded', async () => {
       
       const btn = document.getElementById('mobile-menu-btn');
       if(btn) {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
           const sidebar = document.querySelector('.sidebar');
           if(sidebar) sidebar.classList.toggle('open');
         });
       }
+
+      // Mobilde panel açıkken dışarıya tıklayınca kapansın
+      document.addEventListener('click', (e) => {
+        const sidebar = document.querySelector('.sidebar');
+        if(sidebar && sidebar.classList.contains('open') && !sidebar.contains(e.target)) {
+          sidebar.classList.remove('open');
+        }
+      });
     }
 
     // Aktif sayfayı işaretle
@@ -125,8 +134,38 @@ window.showNotif = function(title, text, type = 'default') {
 
 
 // Global User Avatar Fetcher (Cache)
-import { getDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+import { getDoc, doc, addDoc, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 import { db } from "./firebase.js";
+
+// Yükleme öncesi dosya boyutu/format kontrolü (kullanıcıya anlık, anlaşılır hata göstermek için)
+window.validateFile = function(file, { maxMB, exts } = {}) {
+  if (!file) return { ok: false, message: "Lütfen bir dosya seçin." };
+  if (maxMB && file.size > maxMB * 1024 * 1024) {
+    return { ok: false, message: `Dosya çok büyük (${(file.size / 1024 / 1024).toFixed(1)}MB). Maksimum ${maxMB}MB olmalı.` };
+  }
+  if (exts && exts.length) {
+    const name = file.name.toLowerCase();
+    if (!exts.some(ext => name.endsWith(ext))) {
+      return { ok: false, message: `Desteklenmeyen dosya formatı. Kabul edilenler: ${exts.join(', ')}` };
+    }
+  }
+  return { ok: true };
+};
+
+// Admin işlemlerini kayıt altına alan basit aktivite günlüğü
+window.logActivity = async function(action, targetName) {
+  try {
+    await addDoc(collection(db, "activity_log"), {
+      actorId: localStorage.getItem('uid') || '',
+      actorName: localStorage.getItem('userName') || 'Bilinmiyor',
+      action,
+      targetName: targetName || '',
+      createdAt: serverTimestamp()
+    });
+  } catch (e) {
+    console.error("Aktivite günlüğü yazılamadı:", e);
+  }
+};
 
 window.userCache = new Map();
 
@@ -153,7 +192,7 @@ window.renderAvatarHtml = function(url, size, fallbackChar) {
 };
 
 // Global Notifications Listener
-import { collection, query, orderBy, onSnapshot, limit } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+import { query, orderBy, onSnapshot, limit } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
 import { auth } from "./auth.js";
 

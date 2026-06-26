@@ -63,6 +63,8 @@ document.addEventListener('DOMContentLoaded', () => {
     uploadBtn.addEventListener('click', async () => {
       const file = fileInput.files[0];
       if(!file) return;
+      const check = window.validateFile(file, { maxMB: 5, exts: ['.jpg', '.jpeg', '.png', '.webp', '.gif'] });
+      if(!check.ok) return alert(check.message);
       const uid = localStorage.getItem('uid');
       uploadBtn.innerText = "Yükleniyor...";
       uploadBtn.disabled = true;
@@ -223,9 +225,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     // We don"t have a dedicated votes collection currently, we simulate it or leave as 0
     // In a full implementation, you"d query the notifications or a specific votes collection
     document.getElementById("ps-votes").innerText = "0";
-
-    const friendsQ = await getDocs(collection(db, `friends/${targetUid}/list`));
-    document.getElementById("ps-friends").innerText = friendsQ.size;
   } catch(e) {
     console.error("Stats error", e);
   }

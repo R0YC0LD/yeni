@@ -191,7 +191,12 @@ input:focus, select:focus, textarea:focus {
   margin-bottom: 1rem;
 }
 
-.header-actions { display: flex; gap: 1rem; }
+/* navbar.html'in ilk çocuğu (hamburger+başlık grubu): dar ekranlarda
+   içerik genişliği header-actions'ı (zil+avatar) viewport dışına itmesin diye küçülebilsin */
+.top-header > div:first-child { min-width: 0; flex: 1; overflow: hidden; }
+#page-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; max-width: 100%; vertical-align: bottom; }
+
+.header-actions { display: flex; gap: 1rem; flex-shrink: 0; }
 
 /* Cards & Glassmorphism */
 .card {
@@ -277,7 +282,7 @@ input:focus, select:focus, textarea:focus {
 .badge.admin{color:#e3b341;border-color:rgba(227,179,65,.4);}
 .badge.friend{color:#4ade80;border-color:rgba(74,222,128,.4);}
 
-.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px;}
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:18px;}
 .stat{background:var(--card-bg);border:1px solid var(--line);border-radius:14px;padding:14px 10px;text-align:center;}
 .stat .n{font-family:"Syncopate",sans-serif;font-size:1.15rem;letter-spacing:.5px; color:#fff;}
 .stat .l{font-family:"Space Mono",monospace;font-size:.56rem;letter-spacing:1.5px;color:var(--text-mut);text-transform:uppercase;margin-top:6px;}

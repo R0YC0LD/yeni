@@ -23,6 +23,18 @@ service firebase.storage {
       return request.resource.contentType.matches('audio/.*') && request.resource.size < 50 * 1024 * 1024; // Maksimum 50MB
     }
 
+    function isUnderSize(maxMB) {
+      return request.resource.size < maxMB * 1024 * 1024;
+    }
+
+    // Mutfak (beat/preset/stem) sadece prodüktör/admin: Firestore'daki kullanıcı rolüne bakıyoruz.
+    function callerRole() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role;
+    }
+    function isProducerOrAdmin() {
+      return callerRole() == 'producer' || callerRole() == 'admin';
+    }
+
     // Profil Fotoğrafları
     // Okuma: Herkese açık (Kullanıcılar birbirini görebilsin diye)
     // Yazma/Silme: Sadece kendi klasörüne resim yükleyebilir.
@@ -53,6 +65,24 @@ service firebase.storage {
     match /releases_audio/{userId}/{fileName} {
       allow read: if isAuth();
       allow write, delete: if isAuth() && isOwner(userId) && (request.resource == null || isValidAudio());
+    }
+
+    // Mutfak: Beat Dosyaları (ses) - sadece prodüktör/admin
+    match /beats/{userId}/{fileName} {
+      allow read: if isAuth() && isProducerOrAdmin();
+      allow write, delete: if isAuth() && isOwner(userId) && isProducerOrAdmin() && (request.resource == null || isUnderSize(50));
+    }
+
+    // Mutfak: Preset Dosyaları (DAW preset, herhangi bir format olabilir) - sadece prodüktör/admin
+    match /presets/{userId}/{fileName} {
+      allow read: if isAuth() && isProducerOrAdmin();
+      allow write, delete: if isAuth() && isOwner(userId) && isProducerOrAdmin() && (request.resource == null || isUnderSize(50));
+    }
+
+    // Mutfak: Stem Dosyaları (.zip/.rar) - sadece prodüktör/admin
+    match /stems/{userId}/{fileName} {
+      allow read: if isAuth() && isProducerOrAdmin();
+      allow write, delete: if isAuth() && isOwner(userId) && isProducerOrAdmin() && (request.resource == null || isUnderSize(100));
     }
 
     // Diğer her şey için varsayılan olarak kapalı
