@@ -1,0 +1,59 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    function isSignedIn() { return request.auth != null; }
+    
+    // Audio dosyaları için 25MB sınırı (25 * 1024 * 1024 = 26214400 bytes)
+    function isValidAudio() {
+      return request.resource.contentType.matches('audio/.*') &&
+             request.resource.size < 26214400;
+    }
+    
+    // Cover dosyaları için 5MB sınırı
+    function isValidImage() {
+      return request.resource.contentType.matches('image/.*') &&
+             request.resource.size < 5242880;
+    }
+    
+    // Zip/Rar Stems için 500MB sınırı
+    function isValidArchive() {
+      return request.resource.size < 524288000;
+    }
+
+    match /demos/{userId}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == userId && isValidAudio();
+    }
+    
+    match /releases_covers/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if isSignedIn() && request.auth.uid == userId && isValidImage();
+    }
+    
+    match /avatars/{userId}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == userId && isValidImage();
+    }
+    
+    match /releases_audio/{userId}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == userId && isValidAudio();
+    }
+
+    match /beats/{userId}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == userId && isValidAudio();
+    }
+
+    match /presets/{userId}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /stems/{userId}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == userId && isValidArchive();
+    }
+  }
+}

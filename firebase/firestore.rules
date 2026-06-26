@@ -1,0 +1,77 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Yardımcı Fonksiyonlar
+    function isSignedIn() { return request.auth != null; }
+    function getUserRole() { 
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role; 
+    }
+    function isAdmin() { return getUserRole() == 'admin'; }
+    function isCrew() { return getUserRole() == 'crew'; }
+    function isProducer() { return getUserRole() == 'producer'; }
+    function isArtist() { return getUserRole() == 'artist'; }
+    function isOwner(uid) { return request.auth.uid == uid; }
+
+    match /users/{uid} {
+      // Herkes kendi profilini görebilir, Admin, Crew ve Producer'lar listelemeye erişebilir (bildirim için)
+      allow read: if isSignedIn() && (isOwner(uid) || isAdmin() || isCrew() || isProducer());
+      // Rolleri sadece admin değiştirebilir
+      allow write: if isSignedIn() && (isOwner(uid) || isAdmin());
+    }
+
+    match /demos/{demoId} {
+      // Sanatçı demoları göremez
+      allow read: if isSignedIn() && (isAdmin() || isCrew() || isProducer());
+      // Demo yükleme sadece crew ve admin tarafından (veya prodüktör)
+      allow create: if isSignedIn() && (isAdmin() || isCrew() || isProducer());
+      allow update, delete: if isSignedIn() && (isAdmin() || isCrew());
+    }
+
+    match /releases/{releaseId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && (isAdmin() || isCrew() || isArtist());
+      allow update, delete: if isSignedIn() && isAdmin();
+    }
+
+    match /beats/{beatId} {
+      allow read: if isSignedIn() && (isAdmin() || isCrew() || isProducer() || isArtist());
+      allow create: if isSignedIn() && (isAdmin() || isCrew() || isProducer());
+      allow update, delete: if isSignedIn() && (isAdmin() || isOwner(resource.data.ownerId));
+    }
+    
+    match /presets/{presetId} {
+      allow read: if isSignedIn() && (isAdmin() || isCrew() || isProducer());
+      allow create: if isSignedIn() && (isAdmin() || isCrew() || isProducer());
+      allow update, delete: if isSignedIn() && (isAdmin() || isOwner(resource.data.ownerId));
+    }
+
+    match /stems/{stemId} {
+      allow read: if isSignedIn() && (isAdmin() || isCrew() || isProducer());
+      allow create: if isSignedIn() && (isAdmin() || isCrew() || isProducer());
+      allow update, delete: if isSignedIn() && (isAdmin() || isOwner(resource.data.ownerId));
+    }
+
+    match /notifications/{uid}/user_notifications/{docId} {
+      // Bildirimleri sadece sahibi okuyabilir, sistemi ise herkes tetikleyebilir (oylama sonucu)
+      allow read: if isSignedIn() && isOwner(uid);
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && isOwner(uid);
+    }
+    
+    match /chats/{chatId} {
+      allow read, write: if isSignedIn() && chatId.matches('.*' + request.auth.uid + '.*');
+    }
+
+    match /chats/{chatId}/messages/{msgId} {
+      // Sadece chat id'si kendi uid'sini içeren (yani sohbetteki) kişiler okuyup yazabilir
+      allow read, write: if isSignedIn() && chatId.matches('.*' + request.auth.uid + '.*');
+    }
+    
+    match /friends/{uid}/list/{friendId} {
+      // Arkadaşlık listesi yönetimi
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isOwner(uid);
+    }
+  }
+}
