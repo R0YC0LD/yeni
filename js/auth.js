@@ -122,6 +122,12 @@ function applyPermissions(role) {
 
 export async function registerUser(email, pass) {
   const cred = await createUserWithEmailAndPassword(auth, email, pass);
+  try {
+    let name = email.split('@')[0];
+    await setDoc(doc(db, "users", cred.user.uid), { email: email, name: name, role: 'artist', avatarUrl: '', isApproved: false });
+  } catch(e) {
+    console.error("Firestore user creation failed:", e);
+  }
   await sendEmailVerification(cred.user);
   // signOut yapmıyoruz ki verify-box'ta kalabilsin
 }
