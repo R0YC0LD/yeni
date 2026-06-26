@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="tr">
 <head>
   <meta name="mobile-web-app-capable" content="yes">
@@ -6,6 +6,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#030303">
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <link rel="icon" href="simge.jpg" type="image/jpeg">
   <title>Mesajlar - MüzikHan</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=Syncopate:wght@700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/app.css">
@@ -23,6 +25,11 @@
             <h2 style="font-family:'Syncopate'; color: var(--shn-pink);">Mesajlar</h2>
           </div>
           <button class="btn btn-ghost btn-sm" id="msg-back" style="display:none;">← Sohbetler</button>
+        </div>
+
+        <div id="msg-search-bar" style="margin-bottom: 1.5rem; position: relative;">
+          <input type="text" id="search-user-input" placeholder="Kullanıcı ara ve sohbete başla..." style="width: 100%;">
+          <div id="search-user-results" style="display:none; position:absolute; top:100%; left:0; right:0; background:#111; border:1px solid var(--line-strong); z-index: 100; border-radius: 10px; max-height: 200px; overflow-y:auto; flex-direction:column;"></div>
         </div>
 
         <div id="chat-list">

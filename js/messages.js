@@ -18,6 +18,35 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadUserCacheAndTeams();
   loadChatList();
 
+  const sInput = document.getElementById('search-user-input');
+  const sResults = document.getElementById('search-user-results');
+  let searchCache = null;
+
+  if(sInput && sResults) {
+    sInput.addEventListener('input', async (e) => {
+       const val = e.target.value.trim().toLowerCase();
+       if(!val) { sResults.style.display = 'none'; return; }
+       if(!searchCache) {
+          searchCache = [];
+          sResults.innerHTML = '<div style="padding:10px; color:var(--mut);">Kullanıcılar aranıyor...</div>';
+          sResults.style.display = 'flex';
+          try {
+            const snap = await getDocs(collection(db, "users"));
+            snap.forEach(d => searchCache.push({id: d.id, ...d.data()}));
+          } catch(err){}
+       }
+       const filtered = searchCache.filter(u => (u.name||'').toLowerCase().includes(val) || (u.email||'').toLowerCase().includes(val));
+       sResults.innerHTML = '';
+       filtered.slice(0, 10).forEach(u => {
+         if(u.id === localStorage.getItem('uid')) return;
+         const ava = u.avatarUrl ? `<div style="width:25px;height:25px;border-radius:50%;background-image:url(${u.avatarUrl});background-size:cover;margin-right:10px;"></div>` : `<div style="width:25px;height:25px;border-radius:50%;background:#333;margin-right:10px;display:flex;align-items:center;justify-content:center;font-size:10px;">${(u.name||u.email).charAt(0).toUpperCase()}</div>`;
+         sResults.innerHTML += `<div style="padding:10px; border-bottom:1px solid #333; cursor:pointer; display:flex; align-items:center;" onclick="document.getElementById('search-user-results').style.display='none'; document.getElementById('search-user-input').value=''; window.openChat('${u.id}', '${(u.name||u.email).replace(/'/g,"\\'")}', '${u.avatarUrl||''}')">${ava} <span style="font-size:0.8rem;">${u.name||u.email}</span></div>`;
+       });
+       if(filtered.length === 0) sResults.innerHTML = '<div style="padding:10px; color:var(--mut);">Sonuç bulunamadı</div>';
+       sResults.style.display = 'flex';
+    });
+  }
+
   document.getElementById('msg-back').addEventListener('click', () => {
     document.getElementById('chat-view').classList.add('hidden');
     document.getElementById('chat-list').classList.remove('hidden');
@@ -41,11 +70,6 @@ async function loadUserCacheAndTeams() {
   if(!uid) return;
 
   try {
-    const uSnap = await getDocs(collection(db, "users"));
-    uSnap.forEach(d => {
-      userCache[d.id] = d.data();
-    });
-
     const tSnap = await getDocs(collection(db, "teams"));
     tSnap.forEach(d => {
       const data = d.data();
@@ -68,9 +92,7 @@ function getRoleTagHtml(senderId, role) {
     }
   }
 
-  if(inSameTeam && senderId !== localStorage.getItem('uid')) {
-    return `<span style="font-size:0.6rem; background:var(--shn-pink); color:#000; padding:2px 5px; border-radius:5px; margin-left:5px; font-weight:bold;">[EKİP ÜYESİ]</span>`;
-  }
+  let tags = [];
 
   let tag = '';
   let bg = '#444';
@@ -78,8 +100,15 @@ function getRoleTagHtml(senderId, role) {
   else if(role === 'producer') { tag = 'PRODÜKTÖR'; bg = '#b83b5e'; }
   else if(role === 'artist') { tag = 'SANATÇI'; bg = '#6a2c70'; }
   
-  if(!tag) return '';
-  return `<span style="font-size:0.6rem; background:${bg}; color:#fff; padding:2px 5px; border-radius:5px; margin-left:5px; font-weight:bold;">[${tag}]</span>`;
+  if(tag) {
+    tags.push(`<span style="font-size:0.6rem; background:${bg}; color:#fff; padding:2px 5px; border-radius:5px; margin-left:5px; font-weight:bold;">[${tag}]</span>`);
+  }
+
+  if(inSameTeam && senderId !== localStorage.getItem('uid')) {
+    tags.push(`<span style="font-size:0.6rem; background:var(--shn-pink); color:#000; padding:2px 5px; border-radius:5px; margin-left:5px; font-weight:bold;">[EKİP ÜYESİ]</span>`);
+  }
+
+  return tags.join('');
 }
 
 async function loadChatList() {
@@ -90,62 +119,77 @@ async function loadChatList() {
   let count = 0;
 
   try {
-    // 1. Load Group Chats
-    const groupsQ = query(collection(db, "chats"), where("type", "==", "group"), where("participants", "array-contains", uid));
-    const groupSnap = await getDocs(groupsQ);
-    groupSnap.forEach(gDoc => {
-      count++;
-      const d = gDoc.data();
-      const cId = gDoc.id;
-      list.innerHTML += `
-        <div class="chat-row" style="display:flex; align-items:center; justify-content:space-between; gap:10px; cursor:pointer;">
-          <div style="display:flex; align-items:center; gap:10px; flex:1;" onclick="window.openGroupChat('${cId}', '${d.name.replace(/'/g, "\\'")}')">
-            <div class="avatar" style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;background:#222;font-family:'Syncopate';color:var(--shn-pink);">G</div>
-            <div>
-              <div class="cr-name">${d.name} (Grup)</div>
-              <div class="cr-last">Ekip sohbetine katıl</div>
-            </div>
-          </div>
-        </div>
-      `;
+    const q = query(collection(db, "chats"), where("participants", "array-contains", uid));
+    const snap = await getDocs(q);
+    
+    // Peer IDs we need to fetch
+    const peersToFetch = new Set();
+    const chatDocs = [];
+    
+    snap.forEach(cDoc => {
+      chatDocs.push({id: cDoc.id, ...cDoc.data()});
+      const data = cDoc.data();
+      if(data.type === '1v1') {
+         data.participants.forEach(p => {
+           if(p !== uid && !userCache[p]) peersToFetch.add(p);
+         });
+      }
     });
 
-    // 2. Load 1v1 Chats (existing logic)
-    // To avoid fetching all users if not needed, we'll just iterate userCache
-    for(let peerId in userCache) {
-      if(peerId !== uid) {
-        const d = userCache[peerId];
-        const cId = [uid, peerId].sort().join('_');
-        
-        let isDeletedForMe = false;
-        try {
-          const cDoc = await getDoc(doc(db, "chats", cId));
-          if(cDoc.exists() && cDoc.data().deletedBy && cDoc.data().deletedBy.includes(uid)) {
-            isDeletedForMe = true;
-          }
-        } catch(err) {}
+    // Fetch missing users on demand
+    for(let pId of peersToFetch) {
+       try {
+         const uDoc = await getDoc(doc(db, "users", pId));
+         if(uDoc.exists()) userCache[pId] = uDoc.data();
+       } catch(err){}
+    }
 
+    chatDocs.forEach(d => {
+      if(d.type === 'group') {
+        count++;
+        list.innerHTML += `
+          <div class="chat-row" style="display:flex; align-items:center; justify-content:space-between; gap:10px; cursor:pointer;">
+            <div style="display:flex; align-items:center; gap:10px; flex:1;" onclick="window.openGroupChat('${d.id}', '${(d.name||'Grup').replace(/'/g, "\\'")}')">
+              <div class="avatar" style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;background:#222;font-family:'Syncopate';color:var(--shn-pink);">G</div>
+              <div>
+                <div class="cr-name">${d.name||'Grup'} (Grup)</div>
+                <div class="cr-last">Ekip sohbetine katıl</div>
+              </div>
+            </div>
+          </div>
+        `;
+      } else if (d.type === '1v1' || d.type === undefined) {
+        // Fallback for old chats: d.type might be undefined
+        // Actually, if they don't have participants array, they won't even be fetched by the query!
+        // We will need to make sure old chats are accessible. But we can't fetch them securely without fetching all chats.
+        // For new system, we rely on participants.
+        const peerId = d.participants.find(p => p !== uid);
+        if(!peerId) return;
+
+        let isDeletedForMe = d.deletedBy && d.deletedBy.includes(uid);
         if(!isDeletedForMe) {
           count++;
-          const avatarHtml = d.avatarUrl 
-            ? `<div class="avatar" style="width:40px;height:40px;background-size:cover;background-position:center;background-image:url(${d.avatarUrl})"></div>`
-            : `<div class="avatar" style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;background:#222;font-family:'Syncopate';">${d.name ? d.name.charAt(0).toUpperCase() : '?'}</div>`;
+          const pData = userCache[peerId] || {};
+          const pName = pData.name || pData.email || 'Bilinmeyen Kullanıcı';
+          const avatarHtml = pData.avatarUrl 
+            ? `<div class="avatar" style="width:40px;height:40px;background-size:cover;background-position:center;background-image:url(${pData.avatarUrl})"></div>`
+            : `<div class="avatar" style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;background:#222;font-family:'Syncopate';">${pName.charAt(0).toUpperCase()}</div>`;
 
           list.innerHTML += `
             <div class="chat-row" style="display:flex; align-items:center; justify-content:space-between; gap:10px; cursor:pointer;">
-              <div style="display:flex; align-items:center; gap:10px; flex:1;" onclick="window.openChat('${peerId}', '${(d.name || d.email).replace(/'/g, "\\'")}', '${d.avatarUrl || ''}')">
+              <div style="display:flex; align-items:center; gap:10px; flex:1;" onclick="window.openChat('${peerId}', '${pName.replace(/'/g, "\\'")}', '${pData.avatarUrl || ''}')">
                 ${avatarHtml}
                 <div>
-                  <div class="cr-name">${d.name || d.email}</div>
+                  <div class="cr-name">${pName}</div>
                   <div class="cr-last">Sohbet etmek için tıkla</div>
                 </div>
               </div>
-              <button class="btn btn-ghost" style="padding:5px 10px; font-size:1.2rem; color:var(--text-mut);" onclick="window.promptDeleteChat('${cId}')">🗑️</button>
+              <button class="btn btn-ghost" style="padding:5px 10px; font-size:1.2rem; color:var(--text-mut);" onclick="window.promptDeleteChat('${d.id}')">🗑️</button>
             </div>
           `;
         }
       }
-    }
+    });
 
     if(count === 0) list.innerHTML = '<p>Gösterilecek sohbet bulunamadı.</p>';
   } catch(e) {
@@ -225,7 +269,7 @@ window.openChat = function(peerId, peerName, peerAvatar) {
   `;
 
   // Un-hide chat for me if it was deleted
-  setDoc(doc(db, "chats", currentChatId), { dummy: true }, { merge: true }).catch(()=>{});
+  setDoc(doc(db, "chats", currentChatId), { dummy: true, participants: [uid, peerId], type: '1v1' }, { merge: true }).catch(()=>{});
 
   attachMessagesListener();
 };
@@ -284,7 +328,11 @@ async function sendMessage() {
 
   try {
     if(currentChatType === '1v1') {
-      await setDoc(doc(db, "chats", currentChatId), { deletedBy: [] }, { merge: true });
+      await setDoc(doc(db, "chats", currentChatId), { 
+        deletedBy: [], 
+        participants: [uid, currentPeerId], 
+        type: '1v1' 
+      }, { merge: true });
     }
 
     await addDoc(collection(db, "chats", currentChatId, "messages"), {

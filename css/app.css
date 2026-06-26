@@ -318,50 +318,58 @@ input:focus, select:focus, textarea:focus {
 
 /* ---------- MOBILE RESPONSIVE ---------- */
 @media (max-width: 768px) {
+  #mobile-menu-btn { display: block !important; margin-right: auto; }
+  
   .sidebar {
-    width: 100%;
-    height: auto;
+    width: 260px;
+    height: 100vh;
     position: fixed;
-    bottom: 0;
-    left: 0;
-    z-index: 1000;
-    padding: 0.5rem;
-    flex-direction: row;
+    top: 0;
+    left: -260px;
+    bottom: auto;
+    z-index: 2000;
+    padding: 2rem 1.5rem;
+    flex-direction: column;
     background: rgba(10,10,10,0.95);
-    border-right: none;
-    border-top: 1px solid var(--line);
+    border-right: 1px solid var(--line);
+    border-top: none;
+    transition: left 0.3s ease;
+  }
+  .sidebar.open {
+    left: 0;
   }
   .brand, .user-profile {
-    display: none !important;
+    display: flex !important;
   }
   .nav-menu {
-    flex-direction: row;
+    flex-direction: column;
     width: 100%;
-    justify-content: space-around;
-    gap: 0;
+    justify-content: flex-start;
+    gap: 0.8rem;
   }
   .nav-item {
-    padding: 0.5rem;
-    font-size: 0.6rem;
-    flex-direction: column;
-    gap: 0.3rem;
-    text-align: center;
+    padding: 1rem;
+    font-size: 0.85rem;
+    flex-direction: row;
+    gap: 1rem;
+    text-align: left;
+    justify-content: flex-start;
   }
   .main-content {
     margin-left: 0;
-    margin-bottom: 80px;
+    margin-bottom: 0;
     padding: 1.5rem 1rem;
   }
   .stats-grid, .list-grid {
     grid-template-columns: 1fr;
   }
   .top-header {
-    flex-direction: column;
+    flex-direction: row;
     gap: 1rem;
-    align-items: flex-start;
+    align-items: center;
   }
   .header-actions {
-    width: 100%;
-    justify-content: space-between;
+    width: auto;
+    justify-content: flex-end;
   }
 }

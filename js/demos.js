@@ -1,6 +1,6 @@
 import { db, storage } from './firebase.js';
-import { collection, addDoc, getDocs, doc, setDoc, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
-import { ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-storage.js";
+import { collection, addDoc, getDocs, getDoc, doc, setDoc, query, orderBy, limit, startAfter, serverTimestamp, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+import { ref, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-storage.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
 import { auth } from './auth.js';
 
@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
   
   onAuthStateChanged(auth, (user) => {
     if(user) {
-      loadDemos();
+      window.loadDemos();
     }
   });
 });
@@ -43,7 +43,7 @@ async function uploadDemo() {
     });
     
     alert("Demo yüklendi!");
-    loadDemos();
+    window.loadDemos();
   } catch(e) {
     alert("Hata: " + e.message);
   } finally {
@@ -52,14 +52,36 @@ async function uploadDemo() {
   }
 }
 
-async function loadDemos() {
+window.lastVisibleDemo = null;
+window.loadDemos = async function(loadMore = false) {
   const list = document.getElementById('demos-list');
   if(!list) return;
-  const q = query(collection(db, "demos"), orderBy('createdAt', 'desc'));
+
+  const uid = localStorage.getItem('uid');
+  const userRole = localStorage.getItem('userRole');
+  const canRate = (userRole === 'admin' || userRole === 'producer');
+
+  let q;
+  if(loadMore && window.lastVisibleDemo) {
+    q = query(collection(db, "demos"), orderBy('createdAt', 'desc'), startAfter(window.lastVisibleDemo), limit(10));
+  } else {
+    q = query(collection(db, "demos"), orderBy('createdAt', 'desc'), limit(10));
+    list.innerHTML = '';
+    window.lastVisibleDemo = null;
+  }
   
   try {
     const snap = await getDocs(q);
-    list.innerHTML = '';
+    const btnId = 'load-more-demos';
+    const oldBtn = document.getElementById(btnId);
+    if(oldBtn) oldBtn.remove();
+    
+    if(snap.empty) {
+      if(!loadMore) list.innerHTML = `<p>Gösterilecek demo bulunamadı.</p>`;
+      return;
+    }
+
+    window.lastVisibleDemo = snap.docs[snap.docs.length - 1];
     
     snap.forEach(docSnap => {
       const d = docSnap.data();
@@ -140,12 +162,15 @@ async function loadDemos() {
         </div>
       `;
       
-      // Async render avatar after appending HTML
       window.getUserAvatar(d.ownerId).then(avUrl => {
         const avEl = document.getElementById(`av-${id}`);
         if(avEl) avEl.innerHTML = window.renderAvatarHtml(avUrl, 40, d.ownerName);
       });
     });
+
+    if(snap.docs.length === 10) {
+      list.innerHTML += `<button id="load-more-demos" class="btn btn-secondary" style="width:100%; margin-top:20px; text-align:center;" onclick="window.loadDemos(true)">Daha Fazla Yükle</button>`;
+    }
   } catch(e) {
     list.innerHTML = `<p>Demoları görme yetkiniz yok.</p>`;
   }
@@ -177,20 +202,29 @@ window.submitDemoRating = async function(docId, ownerId, title) {
     document.getElementById(`rate-${docId}`).style.display = 'none';
     
     // Yüzeysel refresh (Tam sistemde onSnapshot kullanılır)
-    loadDemos();
+    window.loadDemos();
   } catch(e) {
     alert("Hata: " + e.message);
   }
 }
 
-import { deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 window.deleteDemo = async function(demoId) {
-  if(!confirm("Bu demoyu tamamen silmek istediğinize emin misiniz?")) return;
-  try {
-    await deleteDoc(doc(db, "demos", demoId));
-    alert("Demo başarıyla silindi.");
-    loadDemos();
-  } catch(e) {
-    alert("Silme hatası: " + e.message);
-  }
-};
+    if(!confirm("Bu demoyu tamamen silmek istediğinize emin misiniz? (Dosyalar da silinecek)")) return;
+    try {
+      const demoRef = doc(db, "demos", demoId);
+      const demoSnap = await getDoc(demoRef);
+      if(demoSnap.exists()) {
+        const d = demoSnap.data();
+        if(d.audioUrl) {
+          try {
+            await deleteObject(ref(storage, d.audioUrl));
+          } catch(err) { console.warn("Storage silinirken hata:", err); }
+        }
+      }
+      await deleteDoc(demoRef);
+      alert("Demo ve dosyaları başarıyla silindi.");
+      window.loadDemos();
+    } catch(e) {
+      alert("Silme hatası: " + e.message);
+    }
+  };

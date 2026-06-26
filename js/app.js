@@ -54,12 +54,45 @@ window.showToast = function(msg) {
   setTimeout(() => el.classList.remove("show"), 3000);
 };
 
-window.showNotif = function(title, text) {
+window.playNotificationSound = function(type = 'default') {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if(!AudioContext) return;
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    
+    osc.type = 'sine';
+    
+    if (type === 'message') {
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+      osc.frequency.exponentialRampToValueAtTime(880.00, ctx.currentTime + 0.1); // A5
+    } else {
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.1);
+    }
+    
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    
+    osc.start();
+    osc.stop(ctx.currentTime + 0.3);
+  } catch(e) {}
+};
+
+window.showNotif = function(title, text, type = 'default') {
   const el = document.getElementById("notif-pop");
   if(!el) return;
   el.querySelector(".np-t").textContent = title;
   el.querySelector(".np-s").textContent = text;
   el.classList.add("show");
+  
+  window.playNotificationSound(type);
+  
   setTimeout(() => el.classList.remove("show"), 4000);
 };
 
@@ -130,4 +163,35 @@ onAuthStateChanged(auth, (user) => {
     if(_notifUnsub) _notifUnsub();
   }
 });
+
+
+window.compressImage = function(file, maxWidth, maxHeight, quality = 0.8) {
+  return new Promise((resolve, reject) => {
+    if(!file.type.startsWith('image/')) { resolve(file); return; }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let w = img.width;
+        let h = img.height;
+        if(w > maxWidth) { h = Math.round((h * maxWidth) / w); w = maxWidth; }
+        if(h > maxHeight) { w = Math.round((w * maxHeight) / h); h = maxHeight; }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        canvas.toBlob((blob) => {
+           if(blob) {
+              const newFile = new File([blob], file.name, { type: 'image/jpeg', lastModified: Date.now() });
+              resolve(newFile);
+           } else { resolve(file); }
+        }, 'image/jpeg', quality);
+      };
+      img.onerror = () => resolve(file);
+      img.src = e.target.result;
+    };
+    reader.onerror = () => resolve(file);
+    reader.readAsDataURL(file);
+  });
+};
 

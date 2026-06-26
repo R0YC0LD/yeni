@@ -1,59 +1,63 @@
 rules_version = '2';
+
+// MüzikHan - Firebase Storage Security Rules
+// Bu kurallar sadece yetkili kullanıcıların işlem yapmasını sağlar ve kötü niyetli spamleri önler.
+
 service firebase.storage {
   match /b/{bucket}/o {
-    
-    function isSignedIn() { return request.auth != null; }
-    
-    // Audio dosyaları için 25MB sınırı (25 * 1024 * 1024 = 26214400 bytes)
-    function isValidAudio() {
-      return request.resource.contentType.matches('audio/.*') &&
-             request.resource.size < 26214400;
+
+    // Yardımcı fonksiyonlar
+    function isAuth() {
+      return request.auth != null;
     }
     
-    // Cover dosyaları için 5MB sınırı
+    function isOwner(uid) {
+      return request.auth.uid == uid;
+    }
+
     function isValidImage() {
-      return request.resource.contentType.matches('image/.*') &&
-             request.resource.size < 5242880;
-    }
-    
-    // Zip/Rar Stems için 500MB sınırı
-    function isValidArchive() {
-      return request.resource.size < 524288000;
+      return request.resource.contentType.matches('image/.*') && request.resource.size < 5 * 1024 * 1024; // Maksimum 5MB
     }
 
-    match /demos/{userId}/{fileName} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn() && request.auth.uid == userId && isValidAudio();
+    function isValidAudio() {
+      return request.resource.contentType.matches('audio/.*') && request.resource.size < 50 * 1024 * 1024; // Maksimum 50MB
     }
-    
-    match /releases_covers/{userId}/{fileName} {
-      allow read: if true;
-      allow write: if isSignedIn() && request.auth.uid == userId && isValidImage();
-    }
-    
+
+    // Profil Fotoğrafları
+    // Okuma: Herkese açık (Kullanıcılar birbirini görebilsin diye)
+    // Yazma/Silme: Sadece kendi klasörüne resim yükleyebilir.
     match /avatars/{userId}/{fileName} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn() && request.auth.uid == userId && isValidImage();
+      allow read: if true;
+      allow write, delete: if isAuth() && isOwner(userId) && (request.resource == null || isValidImage());
     }
-    
+
+    // Demolar (Şarkılar)
+    // Okuma: Sisteme giriş yapmış herkes dinleyebilir.
+    // Yazma/Silme: Sadece kendi klasörüne yükleyebilir, sadece MP3/WAV vb. ses dosyası olmalı.
+    match /demos/{userId}/{fileName} {
+      allow read: if isAuth();
+      allow write, delete: if isAuth() && isOwner(userId) && (request.resource == null || isValidAudio());
+    }
+
+    // Yayın Kapak Fotoğrafları
+    // Okuma: Sisteme giriş yapmış herkes görebilir.
+    // Yazma/Silme: Sadece kendi klasörüne resim yükleyebilir.
+    match /releases_covers/{userId}/{fileName} {
+      allow read: if isAuth();
+      allow write, delete: if isAuth() && isOwner(userId) && (request.resource == null || isValidImage());
+    }
+
+    // Yayın Ses Dosyaları
+    // Okuma: Sisteme giriş yapmış herkes (veya adminler) dinleyebilir.
+    // Yazma/Silme: Sadece kendi klasörüne yükleyebilir.
     match /releases_audio/{userId}/{fileName} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn() && request.auth.uid == userId && isValidAudio();
+      allow read: if isAuth();
+      allow write, delete: if isAuth() && isOwner(userId) && (request.resource == null || isValidAudio());
     }
 
-    match /beats/{userId}/{fileName} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn() && request.auth.uid == userId && isValidAudio();
-    }
-
-    match /presets/{userId}/{fileName} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn() && request.auth.uid == userId;
-    }
-
-    match /stems/{userId}/{fileName} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn() && request.auth.uid == userId && isValidArchive();
+    // Diğer her şey için varsayılan olarak kapalı
+    match /{allPaths=**} {
+      allow read, write: if false;
     }
   }
 }

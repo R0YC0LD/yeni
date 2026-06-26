@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if(user) {
       currentUser = user;
       userRole = localStorage.getItem('userRole');
-      if(userRole !== 'admin' && userRole !== 'producer') {
+      if(userRole !== 'admin') {
         document.querySelector('.main-content').innerHTML = '<h2 style="margin:2rem">Yetkiniz Yok</h2>';
         return;
       }
@@ -198,6 +198,15 @@ window.addMemberToTeam = async function(tId, uid, name, role) {
     cSnap.forEach(s => { if(s.id === tId) parts = s.data().participants || []; });
     if(!parts.includes(uid)) parts.push(uid);
     await setDoc(cRef, { participants: parts }, { merge: true });
+
+    // Send notification to the user
+    const tName = (await getDoc(tRef)).data().name;
+    await addDoc(collection(db, `notifications/${uid}/user_notifications`), {
+      message: `Seni "${tName}" ekibine ekledi!`,
+      createdAt: serverTimestamp(),
+      type: 'team_add',
+      link: 'messages.html'
+    });
 
     document.getElementById(`search-${tId}`).value = '';
     loadTeams();

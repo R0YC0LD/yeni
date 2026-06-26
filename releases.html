@@ -6,74 +6,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#030303">
   <meta charset="UTF-8">
-  <title>Releases - MüzikHan</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=Syncopate:wght@700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css">
-  <style>
-    .btn-giant-green {
-      background: #10b981;
-      color: #000;
-      font-size: 1.2rem;
-      padding: 20px;
-      width: 100%;
-      border-radius: 15px;
-      margin-top: 2rem;
-      border: 2px solid #059669;
-      text-transform: uppercase;
-      font-weight: 800;
-    }
-    .btn-giant-green:hover { background: #059669; box-shadow: 0 0 30px rgba(16,185,129,0.5); color: #fff;}
-    
-    .checkbox-group { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; }
-    .checkbox-group input { width: 20px; height: 20px; }
-    
-    #legal-popup { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 5000; justify-content: center; align-items: center; padding: 20px;}
-    .legal-content { background: #0a0a0a; border: 1px solid var(--shn-pink); padding: 30px; border-radius: 15px; max-width: 600px; max-height: 80vh; overflow-y: auto; }
-  </style>
-</head>
-<body>
-  <div class="app-container">
-    
-    <div id="sidebar-container"></div>
-    
-    <div class="main-content">
-      <div id="navbar-container"></div>
-
-      <div class="card" style="max-width: 650px; margin: 0 auto; border-color: var(--shn-pink);">
-        <h2 style="color: var(--shn-pink); text-shadow: 0 0 10px rgba(255,255,255,0.2);">Şarkını Yayınla</h2>
-        <p class="text-mut" style="margin-bottom:2rem;">DistroKid / LabelRadar MüzikHan Dağıtım Ağı</p>
-        
-        <label>Sanatçı</label>
-        <input type="text" id="rel-artist" disabled class="mb-3" style="background: rgba(255,255,255,0.05); color: #888;">
-        
-        <label>Şarkı Adı</label>
-        <input type="text" id="rel-title" placeholder="Parça Adı" class="mb-3">
-        
-        <label>Kapak Görseli (En az 3000x3000px, max 5MB)</label>
-        <input type="file" id="rel-cover" accept="image/*" class="mb-3">
-        
-        <label>Müzik Dosyası (.wav / .mp3 - Max 25MB)</label>
-        <input type="file" id="rel-audio" accept="audio/wav, audio/mp3, audio/mpeg" class="mb-3">
-        
-        <label>Şarkı Sözleri (Opsiyonel)</label>
-        <textarea id="rel-lyrics" rows="4" class="mb-3" placeholder="Sözleri buraya yapıştır..."></textarea>
-        
-        <label>Yayınlanacağı Tarih</label>
-        <input type="date" id="rel-date" class="mb-3">
-        
-        <div class="checkbox-group">
-          <input type="checkbox" id="rel-explicit">
-          <label for="rel-explicit">Şarkı sözlerinde Explicit (Küfür / Sakıncalı İçerik) var mı?</label>
-        </div>
-        
-        <div class="checkbox-group">
-          <input type="checkbox" id="rel-license">
-          <label for="rel-license">Şarkının beat lisansı ve tüm sample hakları bana ait.</label>
-        </div>
-
-        <div class="checkbox-group" style="margin-top: 20px; border-top: 1px solid #333; padding-top: 20px;">
-  <meta name="theme-color" content="#030303">
-  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <link rel="icon" href="simge.jpg" type="image/jpeg">
   <title>Releases - MüzikHan</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=Syncopate:wght@700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/app.css">

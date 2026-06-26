@@ -19,7 +19,7 @@ service cloud.firestore {
 
     match /teams/{teamId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && (isAdmin() || isProducer());
+      allow create: if isSignedIn() && isAdmin();
       allow update, delete: if isSignedIn() && (isAdmin() || isOwner(resource.data.ownerId));
     }
 

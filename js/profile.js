@@ -35,8 +35,9 @@ document.addEventListener('DOMContentLoaded', () => {
       uploadBtn.disabled = true;
 
       try {
-        const fileRef = ref(storage, `avatars/${uid}/${Date.now()}_${file.name}`);
-        await uploadBytes(fileRef, file);
+        const compressedFile = await window.compressImage(file, 400, 400, 0.8);
+        const fileRef = ref(storage, `avatars/${uid}/${Date.now()}_${compressedFile.name}`);
+        await uploadBytes(fileRef, compressedFile);
         const url = await getDownloadURL(fileRef);
 
         await updateDoc(doc(db, "users", uid), { avatarUrl: url });

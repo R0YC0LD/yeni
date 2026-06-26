@@ -1,6 +1,6 @@
 import { auth, db, storage } from './firebase.js';
 import { collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
-import { ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-storage.js";
+import { ref, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-storage.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -46,8 +46,12 @@ async function submitRelease() {
   btn.disabled = true;
 
   try {
-    const cRef = ref(storage, `releases_covers/${uid}/${Date.now()}_${coverFile.name}`);
-    await uploadBytes(cRef, coverFile);
+    btn.innerText = 'Görsel Sıkıştırılıyor...';
+    const compressedCover = await window.compressImage(coverFile, 1024, 1024, 0.8);
+    btn.innerText = 'Yükleniyor (Zaman alabilir)...';
+
+    const cRef = ref(storage, `releases_covers/${uid}/${Date.now()}_${compressedCover.name}`);
+    await uploadBytes(cRef, compressedCover);
     const coverUrl = await getDownloadURL(cRef);
     
     const aRef = ref(storage, `releases_audio/${uid}/${Date.now()}_${audioFile.name}`);
@@ -77,41 +81,76 @@ async function submitRelease() {
   }
 }
 
-import { getDocs, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+import { getDocs, getDoc, deleteDoc, doc, query, orderBy, limit, startAfter } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 document.addEventListener('DOMContentLoaded', () => {
   onAuthStateChanged(auth, (user) => {
     if(user && localStorage.getItem('userRole') === 'admin') {
       document.getElementById('admin-releases-section').style.display = 'block';
-      loadAdminReleases();
+      window.loadAdminReleases();
     }
   });
 });
 
-async function loadAdminReleases() {
+window.lastVisibleRelease = null;
+window.loadAdminReleases = async function(loadMore = false) {
   const list = document.getElementById('releases-list');
-  list.innerHTML = 'Yükleniyor...';
+  if(!loadMore) list.innerHTML = 'Yükleniyor...';
+
   try {
-    const snap = await getDocs(collection(db, "releases"));
-    if(snap.empty) { list.innerHTML = 'Bekleyen yayın yok.'; return; }
-    list.innerHTML = '';
+    let q;
+    if(loadMore && window.lastVisibleRelease) {
+      q = query(collection(db, "releases"), orderBy('createdAt', 'desc'), startAfter(window.lastVisibleRelease), limit(10));
+    } else {
+      q = query(collection(db, "releases"), orderBy('createdAt', 'desc'), limit(10));
+      list.innerHTML = '';
+      window.lastVisibleRelease = null;
+    }
+
+    const snap = await getDocs(q);
+    const btnId = 'load-more-releases';
+    const oldBtn = document.getElementById(btnId);
+    if(oldBtn) oldBtn.remove();
+
+    if(snap.empty) { 
+      if(!loadMore) list.innerHTML = 'Bekleyen yayın yok.'; 
+      return; 
+    }
+    
+    if(!loadMore) list.innerHTML = '';
+    window.lastVisibleRelease = snap.docs[snap.docs.length - 1];
+
     snap.forEach(d => {
       const data = d.data();
-      list.innerHTML += \<div style="background:rgba(255,255,255,0.05); padding:1rem; border-radius:10px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
-        <div>
-          <h4 style="color:#fff">\</h4>
-          <p style="font-size:0.8rem; color:var(--mut);">Sanatçı: \</p>
-        </div>
-        <button class="btn btn-ghost" style="color:var(--bad);" onclick="deleteRelease('\')">🗑️ Sil</button>
-      </div>\;
+      list.innerHTML += `<div style="background:rgba(255,255,255,0.05); padding:1rem; border-radius:10px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <h4 style="color:#fff">${data.title}</h4>
+            <p style="font-size:0.8rem; color:var(--mut);">Sanatçı: ${data.artistName}</p>
+          </div>
+          <button class="btn btn-ghost" style="color:var(--bad);" onclick="deleteRelease('${d.id}')">🗑️ Sil</button>
+        </div>`;
     });
+
+    if(snap.docs.length === 10) {
+      list.innerHTML += `<button id="load-more-releases" class="btn btn-secondary" style="width:100%; margin-top:10px;" onclick="window.loadAdminReleases(true)">Daha Fazla Yükle</button>`;
+    }
   } catch(e) { list.innerHTML = 'Hata: ' + e.message; }
 }
 
 window.deleteRelease = async function(id) {
-  if(!confirm('Bu yayını silmek istediğinize emin misiniz?')) return;
-  try {
-    await deleteDoc(doc(db, "releases", id));
-    loadAdminReleases();
-  } catch(e) { alert('Hata: ' + e.message); }
-}
-
+    if(!confirm('Bu yayını silmek istediğinize emin misiniz? (Dosyalar da silinecek)')) return;
+    try {
+      const releaseRef = doc(db, "releases", id);
+      const releaseSnap = await getDoc(releaseRef);
+      if(releaseSnap.exists()) {
+        const d = releaseSnap.data();
+        if(d.coverUrl) {
+          try { await deleteObject(ref(storage, d.coverUrl)); } catch(err) {}
+        }
+        if(d.audioUrl) {
+          try { await deleteObject(ref(storage, d.audioUrl)); } catch(err) {}
+        }
+      }
+      await deleteDoc(releaseRef);
+      window.loadAdminReleases();
+    } catch(e) { alert('Hata: ' + e.message); }
+  }
