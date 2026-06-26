@@ -24,6 +24,17 @@
       <p id="error-msg" style="color: var(--bad); text-align: center; margin-top: 1rem;"></p>
     </div>
 
+    <!-- Kayıt Ekranı -->
+    <div id="register-box" class="card auth-box" style="display: none;">
+      <h2 style="text-align: center; margin-bottom: 1.5rem;">Kayıt Ol</h2>
+      <input type="email" id="reg-email" placeholder="E-posta Adresi (@gmail.com)" class="mb-3" style="margin-bottom: 1rem;">
+      <input type="password" id="reg-password" placeholder="Şifre (en az 6 karakter)" class="mb-3" style="margin-bottom: 1rem;">
+      <input type="password" id="reg-password-confirm" placeholder="Şifre (Tekrar)" class="mb-3" style="margin-bottom: 1rem;">
+      <button id="register-submit-btn" class="btn btn-primary" style="width: 100%; margin-bottom: 1rem;">Kayıt Ol</button>
+      <button id="back-to-login-btn" class="btn btn-ghost" style="width: 100%;">Zaten Hesabın Var mı? Giriş Yap</button>
+      <p id="register-error-msg" style="color: var(--bad); text-align: center; margin-top: 1rem;"></p>
+    </div>
+
     <!-- Doğrulama Ekranı -->
     <div id="verify-box" class="card auth-box" style="display: none; text-align: center;">
       <h2 style="margin-bottom: 1rem; color: var(--shn-pink);">E-posta Doğrulaması</h2>
@@ -38,32 +49,50 @@
   </div>
 
   <script type="module">
-    import { initAuth, login, registerUser, auth } from './js/auth.js';
+    import { initAuth, login, registerUser, auth, getFriendlyAuthError } from './js/auth.js';
     initAuth();
 
     document.getElementById('login-btn').addEventListener('click', async () => {
       const e = document.getElementById('email').value;
       const p = document.getElementById('password').value;
       const err = document.getElementById('error-msg');
+      err.innerText = '';
       try {
         await login(e, p);
       } catch(error) {
-        err.innerText = error.message;
+        err.innerText = getFriendlyAuthError(error);
       }
     });
 
-    document.getElementById('register-btn').addEventListener('click', async () => {
-      const e = document.getElementById('email').value;
-      const p = document.getElementById('password').value;
-      const err = document.getElementById('error-msg');
+    // "Kayıt Ol" butonu artık direkt kayıt yapmıyor, ayrı kayıt ekranını açıyor
+    document.getElementById('register-btn').addEventListener('click', () => {
+      document.getElementById('login-box').style.display = 'none';
+      document.getElementById('register-box').style.display = 'block';
+    });
+
+    document.getElementById('back-to-login-btn').addEventListener('click', () => {
+      document.getElementById('register-box').style.display = 'none';
+      document.getElementById('login-box').style.display = 'block';
+    });
+
+    document.getElementById('register-submit-btn').addEventListener('click', async () => {
+      const e = document.getElementById('reg-email').value.trim();
+      const p = document.getElementById('reg-password').value;
+      const pc = document.getElementById('reg-password-confirm').value;
+      const err = document.getElementById('register-error-msg');
+      err.innerText = '';
+
+      if(!e.toLowerCase().endsWith('@gmail.com')) return err.innerText = "Sadece @gmail.com adresleriyle kayıt olabilirsiniz.";
       if(p.length < 6) return err.innerText = "Şifre en az 6 karakter olmalı.";
+      if(p !== pc) return err.innerText = "Girdiğiniz şifreler birbiriyle eşleşmiyor.";
+
       try {
         await registerUser(e, p);
         // Kayıt başarılıysa doğrulama kutusunu göster
-        document.getElementById('login-box').style.display = 'none';
+        document.getElementById('register-box').style.display = 'none';
         document.getElementById('verify-box').style.display = 'block';
       } catch(error) {
-        err.innerText = error.message;
+        err.innerText = getFriendlyAuthError(error);
       }
     });
 

@@ -88,6 +88,12 @@ async function loadUserCacheAndTeams() {
       const data = d.data();
       if(data.members && data.members.find(m => m.uid === uid)) {
         myTeams.push(data);
+        // Ekip üyelerinin isim/rolünü cache'e al: grup sohbetinde sadece 1v1 sohbet
+        // partnerleri cache'leniyordu, grup üyeleri hiç cache'lenmediği için isimleri
+        // "Bilinmiyor" ve rol etiketleri eksik görünüyordu.
+        data.members.forEach(m => {
+          if(!userCache[m.uid]) userCache[m.uid] = { name: m.name, role: m.role };
+        });
       }
     });
   } catch(e) {
@@ -302,25 +308,35 @@ function attachMessagesListener() {
     if(snapshot.empty) {
       chatBox.innerHTML = '<div style="text-align:center; color:var(--text-mut);">Mesaj yok. İlk mesajı sen gönder!</div>';
     }
+    const avatarTargets = [];
+
     snapshot.forEach(docSnap => {
       const d = docSnap.data();
       const isMine = d.senderId === uid;
       const tClass = isMine ? 'mine' : 'theirs';
-      
+
       const senderData = userCache[d.senderId] || {};
       const senderName = isMine ? localStorage.getItem('userName') : (senderData.name || 'Bilinmiyor');
       const senderRole = isMine ? localStorage.getItem('userRole') : (senderData.role || 'user');
       const senderAvatar = isMine ? localStorage.getItem('userAvatar') : senderData.avatarUrl;
 
-      const pAvHtml = senderAvatar ? `<div style="width:30px;height:30px;border-radius:50%;background-image:url(${senderAvatar});background-size:cover;margin-top:5px;flex-shrink:0;"></div>` : `<div style="width:30px;height:30px;border-radius:50%;background:#333;margin-top:5px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;color:white;">${senderName.charAt(0).toUpperCase()}</div>`;
+      const avId = `msg-av-${docSnap.id}`;
+      const avClick = isMine ? '' : ` onclick="window.location.href='profile.html?uid=${d.senderId}'"`;
+      const avCursor = isMine ? 'default' : 'pointer';
+      const pAvHtml = senderAvatar ? `<div id="${avId}"${avClick} style="cursor:${avCursor};width:30px;height:30px;border-radius:50%;background-image:url(${senderAvatar});background-size:cover;margin-top:5px;flex-shrink:0;"></div>` : `<div id="${avId}"${avClick} style="cursor:${avCursor};width:30px;height:30px;border-radius:50%;background:#333;margin-top:5px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;color:white;">${senderName.charAt(0).toUpperCase()}</div>`;
+
+      // Grup sohbetinde üye listesi avatar URL'i tutmuyor; profil fotoğrafını ayrıca çekip yamalıyoruz.
+      if(!isMine && !senderAvatar) avatarTargets.push({ avId, senderId: d.senderId, senderName });
 
       const roleTag = getRoleTagHtml(d.senderId, senderRole);
+      const nameClick = isMine ? '' : ` onclick="window.location.href='profile.html?uid=${d.senderId}'"`;
+      const nameCursor = isMine ? '' : 'cursor:pointer;';
 
       chatBox.innerHTML += `
         <div style="display:flex; gap:8px; ${isMine ? 'flex-direction:row-reverse;' : ''} margin-bottom:12px;">
           ${pAvHtml}
           <div style="display:flex; flex-direction:column; max-width:80%;">
-            <div style="font-size:0.7rem; color:var(--mut); margin-bottom:3px; ${isMine ? 'text-align:right;' : ''}">${senderName} ${roleTag}</div>
+            <div${nameClick} style="${nameCursor}font-size:0.7rem; color:var(--mut); margin-bottom:3px; ${isMine ? 'text-align:right;' : ''}">${senderName} ${roleTag}</div>
             <div class="bubble ${tClass}" style="max-width:100%;">
               <div class="b-text">${d.text}</div>
             </div>
@@ -329,6 +345,14 @@ function attachMessagesListener() {
       `;
     });
     chatBox.scrollTop = chatBox.scrollHeight;
+
+    avatarTargets.forEach(({ avId, senderId }) => {
+      window.getUserAvatar(senderId).then(url => {
+        if(!url) return;
+        const el = document.getElementById(avId);
+        if(el) el.outerHTML = `<div id="${avId}" onclick="window.location.href='profile.html?uid=${senderId}'" style="cursor:pointer;width:30px;height:30px;border-radius:50%;background-image:url(${url});background-size:cover;margin-top:5px;flex-shrink:0;"></div>`;
+      });
+    });
   });
 }
 

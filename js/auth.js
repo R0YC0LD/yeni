@@ -120,6 +120,21 @@ function applyPermissions(role) {
   }, 100);
 }
 
+// Firebase'in ham İngilizce/teknik hata mesajları yerine kullanıcıya anlaşılır Türkçe mesaj göster
+export function getFriendlyAuthError(error) {
+  const map = {
+    'auth/invalid-email': 'Geçersiz e-posta adresi girdiniz.',
+    'auth/user-not-found': 'Bu e-posta ile kayıtlı bir hesap bulunamadı.',
+    'auth/wrong-password': 'Şifre hatalı.',
+    'auth/invalid-credential': 'E-posta veya şifre hatalı.',
+    'auth/email-already-in-use': 'Bu e-posta adresiyle zaten bir hesap var. Giriş yapmayı deneyin.',
+    'auth/weak-password': 'Şifre en az 6 karakter olmalı.',
+    'auth/too-many-requests': 'Çok fazla deneme yapıldı. Lütfen birazdan tekrar deneyin.',
+    'auth/network-request-failed': 'Bağlantı hatası. İnternet bağlantınızı kontrol edin.',
+  };
+  return map[error.code] || 'Bir hata oluştu, lütfen tekrar deneyin.';
+}
+
 export async function registerUser(email, pass) {
   const cred = await createUserWithEmailAndPassword(auth, email, pass);
   try {
