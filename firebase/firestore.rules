@@ -45,7 +45,23 @@ service cloud.firestore {
       // (yayın öncesi sızıntıyı önlemek için diğer kullanıcılara kapalı).
       allow read: if isSignedIn() && (isAdmin() || isOwner(resource.data.ownerId));
       allow create: if isSignedIn() && (isAdmin() || isArtist() || isProducer());
-      allow update, delete: if isSignedIn() && isAdmin();
+      // Admin her alanı güncelleyebilir (onay/red/not/otomatik yayın alanları dahil).
+      // Sahibi ise SADECE reddedilen kendi yayınını "düzelt ve yeniden gönder" akışında,
+      // sadece belirli alanları değiştirip durumu yeniden 'bekliyor'a çekebilir; admin'in
+      // verdiği adminNote/reviewedAt/reviewedBy/ownerId/createdAt alanlarına dokunamaz.
+      allow update: if isSignedIn() && (
+        isAdmin() ||
+        (
+          isOwner(resource.data.ownerId) &&
+          resource.data.status == 'reddedildi' &&
+          request.resource.data.status == 'bekliyor' &&
+          request.resource.data.ownerId == resource.data.ownerId &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+            ['status', 'title', 'artistName', 'lyrics', 'coverUrl', 'audioUrl', 'isExplicit', 'releaseDate', 'resubmittedAt']
+          )
+        )
+      );
+      allow delete: if isSignedIn() && isAdmin();
     }
 
     match /beats/{beatId} {

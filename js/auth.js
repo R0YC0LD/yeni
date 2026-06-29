@@ -78,6 +78,13 @@ export function initAuth() {
       localStorage.setItem('userAvatar', avatar);
       localStorage.setItem('uid', user.uid);
 
+      // Yayın tarihi gelmiş onaylı şarkıları otomatik yayına alma kontrolü: rol burada
+      // taze/güvenilir olduğundan (localStorage henüz güncellenmemiş olabileceği başka
+      // erken tetiklenen dinleyicilerin aksine), admin kontrolü burada yapılıyor.
+      if (role === 'admin' && window.checkAndPublishDueReleases) {
+        window.checkAndPublishDueReleases();
+      }
+
       if (isLoginPage) {
         window.location.href = 'dashboard.html';
       } else {

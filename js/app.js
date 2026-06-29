@@ -134,7 +134,7 @@ window.showNotif = function(title, text, type = 'default') {
 
 
 // Global User Avatar Fetcher (Cache)
-import { getDoc, doc, addDoc, collection, serverTimestamp, deleteDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+import { getDoc, doc, addDoc, collection, serverTimestamp, deleteDoc, getDocs, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 import { db } from "./firebase.js";
 
 // Yükleme öncesi dosya boyutu/format kontrolü (kullanıcıya anlık, anlaşılır hata göstermek için)
@@ -150,6 +150,11 @@ window.validateFile = function(file, { maxMB, exts } = {}) {
     }
   }
   return { ok: true };
+};
+
+// Kullanıcıdan gelen metni innerHTML'e gömmeden önce kaçışlamak için (stored XSS önleme).
+window.escapeHtml = function(str) {
+  return String(str ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 };
 
 // Bir koleksiyondaki 24 saatten eski kayıtları siler (createdAt'e bakar).
@@ -194,6 +199,32 @@ window.sendNotification = async function(uid, message, type, link) {
     });
   } catch (e) {
     console.error("Bildirim gönderilemedi:", e);
+  }
+};
+
+// Yayın tarihi gelmiş "onaylandı" durumundaki şarkıları "yayınlandı" durumuna geçirir.
+// Statik site + sunucu tarafı zamanlanmış görev (Cloud Functions) olmadığından, gerçek
+// zamanlı/otomatik bir cron yerine bu kontrol bir admin herhangi bir sayfayı her açtığında
+// çalışır (bkz. auth.js -> initAuth). Aynı yayın birden fazla kez kontrol edilse de
+// (status zaten 'yayınlandı' olduğundan) sorgu eşleşmeyeceği için işlem tekrarlanmaz.
+window.checkAndPublishDueReleases = async function() {
+  try {
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+    const snap = await getDocs(query(collection(db, 'releases'), where('status', '==', 'onaylandı')));
+    for (const d of snap.docs) {
+      const data = d.data();
+      if (data.releaseDate && data.releaseDate <= todayStr) {
+        await updateDoc(doc(db, 'releases', d.id), { status: 'yayınlandı', publishedAt: serverTimestamp() });
+        if (data.ownerId) {
+          window.sendNotification(data.ownerId, `"${data.title}" adlı şarkın artık yayında! 🎉`, 'release_published', 'releases.html');
+        }
+        window.logActivity('Yayın tarihi geldi, otomatik yayına alındı', data.title);
+      }
+    }
+  } catch (e) {
+    console.error('Otomatik yayın kontrolü hatası:', e);
   }
 };
 
